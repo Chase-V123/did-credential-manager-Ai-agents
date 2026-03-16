@@ -6,6 +6,7 @@ WORKDIR /app
 # Copy root package files
 COPY package*.json ./
 COPY tsconfig.json ./
+COPY scripts/ ./scripts/
 
 # Copy common package
 COPY common/package*.json ./common/
@@ -33,6 +34,7 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
+COPY scripts/ ./scripts/
 COPY common/package*.json ./common/
 COPY issuer/package*.json ./issuer/
 

@@ -29,6 +29,7 @@ export * from './types/messages.js';
 
 // Utils exports
 export { default as logger, Logger, LogLevel, LogRecord, MessageRecord } from './utils/logger.js';
+export { saveIdentity, loadIdentity, IdentityRecord } from './utils/identity-store.js';
 
 // Protocol exports
 export * from './protocols/index.js';
