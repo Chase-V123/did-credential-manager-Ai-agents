@@ -177,15 +177,33 @@ export class AIAgent {
   }
 
   /**
-   * POST to registry to register and receive AgentIdentityCredential.
+   * Register as a trusted vendor with the registry, then register the agent using
+   * the issued VendorCredential. This establishes the two-level trust chain:
+   * Registry → Vendor → Agent.
    */
   private async registerWithRegistry(): Promise<void> {
     const { registryUrl, agentId, capabilities, serviceEndpoint, agentBaseUrl } = this.config;
-    // Register with the base HTTP URL, not the /didcomm URL
     const registrationEndpoint = agentBaseUrl || serviceEndpoint.replace(/\/didcomm$/, '');
-    logger.info(`AI Agent: registering with registry at ${registryUrl}`);
 
-    const response = await fetch(`${registryUrl}/agents/register`, {
+    // Step 1: register as a vendor — the registry vets and issues a VendorCredential
+    logger.info(`AI Agent: registering as vendor with registry at ${registryUrl}`);
+    const vendorRes = await fetch(`${registryUrl}/vendors/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vendorDid: this.agentDid, vendorId: agentId }),
+    });
+
+    if (!vendorRes.ok) {
+      const text = await vendorRes.text();
+      throw new Error(`Vendor registration failed (${vendorRes.status}): ${text}`);
+    }
+
+    const { credential: vendorCredential } = await vendorRes.json() as { credential: any };
+    logger.info('AI Agent: received VendorCredential');
+
+    // Step 2: register the agent, presenting the VendorCredential as proof of trust
+    logger.info(`AI Agent: registering agent with registry`);
+    const agentRes = await fetch(`${registryUrl}/agents/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -193,17 +211,18 @@ export class AIAgent {
         agentId,
         capabilities,
         serviceEndpoint: registrationEndpoint,
+        vendorCredential,
       }),
     });
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Registry registration failed (${response.status}): ${text}`);
+    if (!agentRes.ok) {
+      const text = await agentRes.text();
+      throw new Error(`Agent registration failed (${agentRes.status}): ${text}`);
     }
 
-    const { credential } = await response.json() as { credential: any };
-    this.credentialStore.store(credential);
-    logger.info('AI Agent: received and stored AgentIdentityCredential');
+    const { credential: agentCredential } = await agentRes.json() as { credential: any };
+    this.credentialStore.store(agentCredential);
+    logger.info('AI Agent: received and stored AgentIdentityCredential (vendorDid recorded in credential)');
   }
 
   getDid(): string {

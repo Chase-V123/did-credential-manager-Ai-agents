@@ -88,11 +88,47 @@ export class RegistryAgent {
   }
 
   /**
+   * Issue a VendorCredential to a trusted vendor.
+   */
+  async issueVendorCredential(params: {
+    vendorDid: string;
+    vendorId: string;
+  }): Promise<any> {
+    if (!this.registryDid) throw new Error('Registry agent not initialized');
+
+    const credential = {
+      '@context': ['https://www.w3.org/2018/credentials/v1'],
+      type: ['VerifiableCredential', 'VendorCredential'],
+      issuer: { id: this.registryDid },
+      issuanceDate: new Date().toISOString(),
+      credentialSubject: {
+        id: params.vendorDid,
+        vendorId: params.vendorId,
+      },
+    };
+
+    const signed = {
+      ...credential,
+      proof: {
+        type: 'Ed25519Signature2020',
+        created: new Date().toISOString(),
+        proofPurpose: 'assertionMethod',
+        verificationMethod: `${this.registryDid}#key-1`,
+      },
+    };
+
+    logger.info('Issued VendorCredential', { subject: params.vendorDid, vendorId: params.vendorId });
+    return signed;
+  }
+
+  /**
    * Issue an AgentIdentityCredential for a registering AI agent.
+   * The credential is issued by the registry but records the vendor who registered the agent.
    */
   async issueAgentCredential(params: {
     agentDid: string;
     agentId: string;
+    vendorDid: string;
     capabilities: string[];
     serviceEndpoint: string;
   }): Promise<any> {
@@ -106,6 +142,7 @@ export class RegistryAgent {
       credentialSubject: {
         id: params.agentDid,
         agentId: params.agentId,
+        vendorDid: params.vendorDid,
         capabilities: params.capabilities,
         serviceEndpoint: params.serviceEndpoint,
       },
@@ -123,6 +160,7 @@ export class RegistryAgent {
 
     logger.info('Issued AgentIdentityCredential', {
       subject: params.agentDid,
+      vendorDid: params.vendorDid,
       capabilities: params.capabilities,
     });
 

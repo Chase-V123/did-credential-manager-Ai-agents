@@ -248,6 +248,15 @@ export class OrchestratorAgent {
       return;
     }
 
+    // Authorization: verify vendor trust chain
+    const vendorDid: string | undefined = verificationResult.claims?.vendorDid;
+    if (!vendorDid) {
+      const err = new Error(`Agent ${pending.agentDid} credential is missing vendorDid — not issued through a trusted vendor`);
+      logger.warn(err.message);
+      pending.reject(err);
+      return;
+    }
+
     // Authorization: check capabilities claim
     const agentCapabilities: string[] = verificationResult.claims?.capabilities || [];
     if (!agentCapabilities.includes(pending.requiredCapability)) {
@@ -259,7 +268,7 @@ export class OrchestratorAgent {
       return;
     }
 
-    logger.info(`Orchestrator: agent ${pending.agentDid} verified and authorized for "${pending.requiredCapability}"`);
+    logger.info(`Orchestrator: agent ${pending.agentDid} verified — trusted vendor: ${vendorDid}, capability: "${pending.requiredCapability}"`);
 
     // Delegate task to agent via HTTP
     try {

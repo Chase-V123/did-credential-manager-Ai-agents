@@ -11,9 +11,17 @@ import { mkdirSync, existsSync } from 'fs';
 import { dirname } from 'path';
 import { logger } from '@did-edu/common';
 
+export interface RegisteredVendor {
+  vendorDid: string;
+  vendorId: string;
+  credential: any;
+  registeredAt: string;
+}
+
 export interface RegisteredAgent {
   agentDid: string;
   agentId: string;
+  vendorDid: string;
   capabilities: string[];
   serviceEndpoint: string;
   credential: any;
@@ -33,9 +41,17 @@ export class AgentStore {
 
   private initialize(): void {
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS vendors (
+        vendorDid TEXT PRIMARY KEY,
+        vendorId TEXT NOT NULL,
+        credential TEXT NOT NULL,
+        registeredAt TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS agents (
         agentDid TEXT PRIMARY KEY,
         agentId TEXT NOT NULL,
+        vendorDid TEXT NOT NULL,
         capabilities TEXT NOT NULL,
         serviceEndpoint TEXT NOT NULL,
         credential TEXT NOT NULL,
@@ -46,20 +62,45 @@ export class AgentStore {
     `);
   }
 
+  registerVendor(vendor: Omit<RegisteredVendor, 'registeredAt'>): void {
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO vendors (vendorDid, vendorId, credential, registeredAt)
+      VALUES (?, ?, ?, ?)
+    `);
+    stmt.run(vendor.vendorDid, vendor.vendorId, JSON.stringify(vendor.credential), new Date().toISOString());
+    logger.info(`Vendor registered: ${vendor.vendorId} (${vendor.vendorDid})`);
+  }
+
+  isTrustedVendor(vendorDid: string): boolean {
+    const row = this.db.prepare('SELECT vendorDid FROM vendors WHERE vendorDid = ?').get(vendorDid);
+    return !!row;
+  }
+
+  getAllVendors(): RegisteredVendor[] {
+    const rows = this.db.prepare('SELECT * FROM vendors ORDER BY registeredAt DESC').all() as any[];
+    return rows.map(r => ({
+      vendorDid: r.vendorDid,
+      vendorId: r.vendorId,
+      credential: JSON.parse(r.credential),
+      registeredAt: r.registeredAt,
+    }));
+  }
+
   registerAgent(agent: Omit<RegisteredAgent, 'registeredAt'>): void {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO agents (agentDid, agentId, capabilities, serviceEndpoint, credential, registeredAt)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO agents (agentDid, agentId, vendorDid, capabilities, serviceEndpoint, credential, registeredAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       agent.agentDid,
       agent.agentId,
+      agent.vendorDid,
       JSON.stringify(agent.capabilities),
       agent.serviceEndpoint,
       JSON.stringify(agent.credential),
       new Date().toISOString()
     );
-    logger.info(`Agent registered: ${agent.agentDid} (${agent.agentId})`);
+    logger.info(`Agent registered: ${agent.agentDid} (${agent.agentId}) via vendor ${agent.vendorDid}`);
   }
 
   getAgent(agentDid: string): RegisteredAgent | null {
@@ -86,6 +127,7 @@ export class AgentStore {
     return {
       agentDid: row.agentDid,
       agentId: row.agentId,
+      vendorDid: row.vendorDid,
       capabilities: JSON.parse(row.capabilities),
       serviceEndpoint: row.serviceEndpoint,
       credential: JSON.parse(row.credential),

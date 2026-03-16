@@ -12,7 +12,9 @@
       "Bash(powershell.exe -Command \"& 'C:\\\\Program Files\\\\Docker\\\\Docker\\\\resources\\\\bin\\\\docker.exe' compose version\" 2>&1)",
       "Bash(export:*)",
       "Bash(powershell.exe -Command \"Invoke-RestMethod http://localhost:5004/agents | ConvertTo-Json -Depth 5\")",
-      "Bash(powershell.exe -Command \"Invoke-RestMethod http://localhost:5005/orchestrate -Method Post -ContentType 'application/json' -Body '{\\\\\"task\\\\\":\\\\\"Summarize: Decentralized identity gives users control over their own data without relying on a central authority.\\\\\",\\\\\"capability\\\\\":\\\\\"summarization\\\\\"}' | ConvertTo-Json -Depth 5\")"
+      "Bash(powershell.exe -Command \"Invoke-RestMethod http://localhost:5005/orchestrate -Method Post -ContentType 'application/json' -Body '{\\\\\"task\\\\\":\\\\\"Summarize: Decentralized identity gives users control over their own data without relying on a central authority.\\\\\",\\\\\"capability\\\\\":\\\\\"summarization\\\\\"}' | ConvertTo-Json -Depth 5\")",
+      "Bash(powershell.exe -Command \"\nWrite-Host '=== Step 2: Health Checks ==='\nWrite-Host 'Registry:'; Invoke-RestMethod http://localhost:5004/health | ConvertTo-Json\nWrite-Host 'AI Agent:'; Invoke-RestMethod http://localhost:5006/health | ConvertTo-Json\nWrite-Host 'Orchestrator:'; Invoke-RestMethod http://localhost:5005/health | ConvertTo-Json\n\")",
+      "Bash(powershell.exe -Command \"\nWrite-Host '=== Step 4: Orchestration ==='\nInvoke-RestMethod http://localhost:5005/orchestrate \\\\`\n  -Method Post \\\\`\n  -ContentType 'application/json' \\\\`\n  -Body '{\\\\\"task\\\\\":\\\\\"Summarize: Decentralized identity gives users control over their own data without relying on a central authority.\\\\\",\\\\\"capability\\\\\":\\\\\"summarization\\\\\"}' \\\\`\n  | ConvertTo-Json -Depth 5\n\")"
     ]
   }
 }
