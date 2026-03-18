@@ -137,3 +137,47 @@ docker compose down -v
 - **Standards-based** — W3C Verifiable Credentials, DIDComm v2.1, did:peer. Not proprietary.
 - **Plug in any LLM** — swap `ai-agent/src/executor/task-executor.ts` to call Claude, GPT-4, or any model. The identity and verification layer is model-agnostic.
 - **Production-ready patterns** — persistent identity across restarts, SQLite credential store, capability-based authorization.
+
+
+
+##  Trust Chain: Registry → Vendor → Agent
+
+  1. How the agent gets its DID
+
+  On initialize() (ai-agent/src/agent.ts:155), the agent either loads a persistent DID from disk or generates a fresh
+  did:peer via DIDComm.generateDid(). The DID and its secrets are saved to identityPath so they survive restarts.
+
+  2. How the vendor gets registered with the registry
+
+  This is currently open/unauthenticated — POST /vendors/register (registry/src/routes/registry-routes.ts:42) accepts
+  any { vendorDid, vendorId } body and immediately issues a VendorCredential. There is no vetting step. The registry
+  just:
+  1. Signs a VendorCredential with its own DID as issuer
+  2. Stores the vendor in SQLite via AgentStore.registerVendor()
+
+  So right now, anyone who knows the registry URL can become a trusted vendor by self-declaring.
+
+  3. How the agent gets trust from the vendor/registry
+
+  AIAgent.registerWithRegistry() (ai-agent/src/agent.ts:184) runs a two-step protocol:
+
+  Step 1 — Vendor registration:
+  POST /vendors/register  { vendorDid: agentDid, vendorId: agentId }
+  → receives VendorCredential (signed by registry)
+  The agent registers itself as the vendor (its own DID is the vendor DID).
+
+  Step 2 — Agent registration (requires VendorCredential):
+  POST /agents/register  { agentDid, agentId, capabilities, serviceEndpoint, vendorCredential }
+  → receives AgentIdentityCredential
+  The registry checks (registry-routes.ts:101):
+  - vendorCredential.credentialSubject.id must be a DID already in the trusted vendors table
+  - If trusted → issues AgentIdentityCredential with vendorDid recorded in the credential subject
+
+  The agent stores the AgentIdentityCredential in its local SQLite DB. Later, when the orchestrator challenges it, it
+  presents this credential as a VP.
+
+  ---
+  Key gap
+
+  The vendor registration step has no gatekeeping — it's effectively a self-service allowlist. In a real system you'd
+  add some form of pre-authorization (API key, admin approval, signed invite token) before issuing a VendorCredential.
