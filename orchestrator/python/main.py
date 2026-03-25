@@ -4,7 +4,6 @@ import httpx
 from llama_index.core.agent.workflow import FunctionAgent
 from llama_index.llms.openai import OpenAI
 
-
 def http_call(
     url: str,
     method: str = "GET",

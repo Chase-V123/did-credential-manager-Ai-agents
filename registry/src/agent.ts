@@ -129,7 +129,8 @@ export class RegistryAgent {
     agentDid: string;
     agentId: string;
     vendorDid: string;
-    capabilities: string[];
+    summary: string;
+    callingConvention: string;
     serviceEndpoint: string;
   }): Promise<any> {
     if (!this.registryDid) throw new Error('Registry agent not initialized');
@@ -143,7 +144,8 @@ export class RegistryAgent {
         id: params.agentDid,
         agentId: params.agentId,
         vendorDid: params.vendorDid,
-        capabilities: params.capabilities,
+        summary: params.summary,
+        callingConvention: params.callingConvention,
         serviceEndpoint: params.serviceEndpoint,
       },
     };
@@ -161,7 +163,8 @@ export class RegistryAgent {
     logger.info('Issued AgentIdentityCredential', {
       subject: params.agentDid,
       vendorDid: params.vendorDid,
-      capabilities: params.capabilities,
+      summary: params.summary,
+      callingConvention: params.callingConvention,
     });
 
     return signed;
