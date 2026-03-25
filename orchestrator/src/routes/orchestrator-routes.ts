@@ -36,26 +36,26 @@ export function createOrchestratorRoutes(agent: OrchestratorAgent): Router {
    * POST /orchestrate
    * Main entry point: discover agent, verify identity, delegate task.
    *
-   * Body: { task: string, capability: string }
+   * Body: { task: string, summary: string }
    * Returns: { verified: true, agentDid: string, result: { output, model, executedAt } }
    */
   router.post('/orchestrate', async (req: Request, res: Response) => {
     try {
-      const { task, capability } = req.body;
+      const { task, summary } = req.body;
 
       if (!task || typeof task !== 'string') {
         res.status(400).json({ error: 'task string is required' });
         return;
       }
 
-      if (!capability || typeof capability !== 'string') {
-        res.status(400).json({ error: 'capability string is required' });
+      if (!summary || typeof summary !== 'string') {
+        res.status(400).json({ error: 'summary string is required' });
         return;
       }
 
-      logger.info('Orchestration requested', { capability, taskLength: task.length });
+      logger.info('Orchestration requested', { summary, taskLength: task.length });
 
-      const result = await agent.orchestrate(task, capability);
+      const result = await agent.orchestrate(task, summary);
 
       res.json(result);
     } catch (error: any) {

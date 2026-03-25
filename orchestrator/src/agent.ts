@@ -3,31 +3,28 @@
  *
  * Wraps VerifierAgent to add:
  * - Persistent identity
- * - Registry client (discover agents by capability)
+ * - Registry client (discover agents by summary)
  * - Async DIDComm challenge-response bridged to sync HTTP via pending-task map
- * - Capability authorization after VP verification
+ * - Summary authorization after VP verification
+ * - Calling-convention aware delegation
  *
  * @module agent
  */
 
 import {
   DIDComm,
-  PrefixResolver,
   EphemeralSecretsResolver,
   saveIdentity,
   loadIdentity,
   logger,
 } from '@did-edu/common';
 import { v4 as uuidv4 } from 'uuid';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import { executeTask, TaskResult } from './executor/task-executor.js';
 
 export interface OrchestrateResult {
   verified: boolean;
   agentDid: string;
-  result: any;
+  result: TaskResult;
 }
 
 interface PendingTask {
@@ -36,22 +33,23 @@ interface PendingTask {
   agentDid: string;
   serviceEndpoint: string;
   task: string;
-  requiredCapability: string;
+  requiredSummary: string;
   challengeValue: string;
 }
 
-// ---------------------------------------------------------------------------
-// Minimal inline verifier (avoids cross-package import issues at runtime)
-// ---------------------------------------------------------------------------
+interface VerificationResult {
+  verified: boolean;
+  claims: any;
+  errors: string[];
+}
 
-function verifyPresentation(presentation: any, expectedChallenge: string): { verified: boolean; claims: any; errors: string[] } {
+function verifyPresentation(presentation: any, expectedChallenge: string): VerificationResult {
   const errors: string[] = [];
 
   if (!presentation) {
     return { verified: false, claims: null, errors: ['No presentation provided'] };
   }
 
-  // Check challenge matches
   const proofChallenge = presentation.proof?.challenge;
   if (!proofChallenge) {
     errors.push('Presentation proof missing challenge');
@@ -63,19 +61,22 @@ function verifyPresentation(presentation: any, expectedChallenge: string): { ver
     return { verified: false, claims: null, errors };
   }
 
-  // Extract claims from first AgentIdentityCredential in the VP
   const credentials: any[] = presentation.verifiableCredential || [];
   const agentCred = credentials.find(
     vc => (vc.type as string[] || []).includes('AgentIdentityCredential')
   );
 
-  const claims = agentCred?.credentialSubject || null;
-  return { verified: true, claims, errors: [] };
+  return {
+    verified: true,
+    claims: agentCred?.credentialSubject || null,
+    errors: [],
+  };
 }
 
-// ---------------------------------------------------------------------------
-// OrchestratorAgent
-// ---------------------------------------------------------------------------
+function summaryMatches(agentSummary: string | undefined, requestedSummary: string): boolean {
+  if (!agentSummary) return false;
+  return agentSummary.toLowerCase().includes(requestedSummary.trim().toLowerCase());
+}
 
 export interface OrchestratorAgentConfig {
   serviceEndpoint: string;
@@ -92,11 +93,6 @@ export class OrchestratorAgent {
   private readonly serviceEndpoint: string;
   private readonly identityPath: string;
   private readonly taskTimeoutMs: number;
-
-  /**
-   * Map from challengeValue → pending task info.
-   * When a VP arrives on /didcomm we look up the challenge from the proof.
-   */
   private pendingTasks: Map<string, PendingTask> = new Map();
 
   constructor(config: OrchestratorAgentConfig) {
@@ -119,7 +115,7 @@ export class OrchestratorAgent {
       saveIdentity(this.identityPath, this.orchestratorDid, this.secretsResolver.getAllSecrets());
       logger.info(`Orchestrator: generated new DID: ${this.orchestratorDid}`);
     }
-    return this.orchestratorDid!;
+    return this.orchestratorDid;
   }
 
   getDid(): string {
@@ -127,27 +123,12 @@ export class OrchestratorAgent {
     return this.orchestratorDid;
   }
 
-  // ---------------------------------------------------------------------------
-  // Orchestration
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Full orchestration flow:
-   * 1. Discover agent via registry
-   * 2. Send DIDComm presentation request with a challenge
-   * 3. Wait (async) for agent to respond on /didcomm
-   * 4. Verify VP + capability claim
-   * 5. Delegate task via HTTP
-   * 6. Return result
-   */
-  async orchestrate(task: string, capability: string): Promise<OrchestrateResult> {
+  async orchestrate(task: string, summary: string): Promise<OrchestrateResult> {
     if (!this.orchestratorDid) throw new Error('Orchestrator not initialized');
 
-    // Step 1: discover agent
-    const { agentDid, serviceEndpoint } = await this.discoverAgent(capability);
-    logger.info(`Orchestrator: found agent ${agentDid} at ${serviceEndpoint} for capability "${capability}"`);
+    const { agentDid, serviceEndpoint } = await this.discoverAgent(summary);
+    logger.info(`Orchestrator: found agent ${agentDid} at ${serviceEndpoint} for summary "${summary}"`);
 
-    // Step 2: generate challenge and send presentation request via DIDComm
     const challengeValue = uuidv4();
 
     const requestMessage = {
@@ -158,20 +139,16 @@ export class OrchestratorAgent {
       },
     };
 
-    // Step 3: register the pending task BEFORE sending the request, so the
-    // VP callback can be matched even if it arrives during sendMessage.
     const responsePromise = new Promise<OrchestrateResult>((resolve, reject) => {
-      const pending: PendingTask = {
+      this.pendingTasks.set(challengeValue, {
         resolve,
         reject,
         agentDid,
         serviceEndpoint,
         task,
-        requiredCapability: capability,
+        requiredSummary: summary,
         challengeValue,
-      };
-
-      this.pendingTasks.set(challengeValue, pending);
+      });
 
       setTimeout(() => {
         if (this.pendingTasks.has(challengeValue)) {
@@ -187,14 +164,6 @@ export class OrchestratorAgent {
     return responsePromise;
   }
 
-  // ---------------------------------------------------------------------------
-  // DIDComm message handling
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Handle an incoming DIDComm message.
-   * When we receive a VP from an agent, verify it and complete the pending task.
-   */
   async handleMessage(packedMessage: string): Promise<any> {
     const [message] = await this.didcomm.receiveMessage(packedMessage);
     const plaintext = message.as_value();
@@ -204,10 +173,8 @@ export class OrchestratorAgent {
     switch (plaintext.type) {
       case 'https://didcomm.org/present-proof/3.0/presentation':
         return await this.handlePresentation(plaintext);
-
       case 'https://didcomm.org/trust-ping/2.0/ping':
         return await this.handleTrustPing(plaintext);
-
       default:
         logger.warn(`Orchestrator: unknown message type: ${plaintext.type}`);
         return null;
@@ -222,16 +189,14 @@ export class OrchestratorAgent {
       return;
     }
 
-    // Find the pending task by matching the challenge in the VP proof
     const challenge = presentation.proof?.challenge as string | undefined;
 
     if (!challenge) {
-      logger.error('Orchestrator: VP has no challenge in proof — cannot match to pending task');
+      logger.error('Orchestrator: VP has no challenge in proof and cannot be matched to a pending task');
       return;
     }
 
     const pending = this.pendingTasks.get(challenge);
-
     if (!pending) {
       logger.warn(`Orchestrator: no pending task for challenge ${challenge}`);
       return;
@@ -239,40 +204,39 @@ export class OrchestratorAgent {
 
     this.pendingTasks.delete(challenge);
 
-    // Verify the presentation
     const verificationResult = verifyPresentation(presentation, pending.challengeValue);
-
     if (!verificationResult.verified) {
-      logger.warn('Orchestrator: VP verification failed', { errors: verificationResult.errors });
       pending.reject(new Error(`VP verification failed: ${verificationResult.errors.join(', ')}`));
       return;
     }
 
-    // Authorization: verify vendor trust chain
     const vendorDid: string | undefined = verificationResult.claims?.vendorDid;
     if (!vendorDid) {
-      const err = new Error(`Agent ${pending.agentDid} credential is missing vendorDid — not issued through a trusted vendor`);
-      logger.warn(err.message);
-      pending.reject(err);
+      pending.reject(new Error(`Agent ${pending.agentDid} credential is missing vendorDid`));
       return;
     }
 
-    // Authorization: check capabilities claim
-    const agentCapabilities: string[] = verificationResult.claims?.capabilities || [];
-    if (!agentCapabilities.includes(pending.requiredCapability)) {
-      const err = new Error(
-        `Agent ${pending.agentDid} not authorized for capability: ${pending.requiredCapability}`
+    const agentSummary: string | undefined = verificationResult.claims?.summary;
+    const callingConvention: string = verificationResult.claims?.callingConvention || 'http';
+
+    if (!summaryMatches(agentSummary, pending.requiredSummary)) {
+      pending.reject(
+        new Error(`Agent ${pending.agentDid} summary does not satisfy request: ${pending.requiredSummary}`)
       );
-      logger.warn(err.message);
-      pending.reject(err);
       return;
     }
 
-    logger.info(`Orchestrator: agent ${pending.agentDid} verified — trusted vendor: ${vendorDid}, capability: "${pending.requiredCapability}"`);
+    logger.info(
+      `Orchestrator: agent ${pending.agentDid} verified via vendor ${vendorDid}; callingConvention=${callingConvention}`
+    );
 
-    // Delegate task to agent via HTTP
     try {
-      const taskResult = await this.delegateTask(pending.serviceEndpoint, pending.task, pending.agentDid);
+      const taskResult = await this.delegateTask(
+        pending.serviceEndpoint,
+        pending.task,
+        pending.agentDid,
+        callingConvention
+      );
       pending.resolve({
         verified: true,
         agentDid: pending.agentDid,
@@ -294,41 +258,50 @@ export class OrchestratorAgent {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
-
-  private async discoverAgent(capability: string): Promise<{ agentDid: string; serviceEndpoint: string }> {
-    const url = `${this.registryUrl}/agents?capability=${encodeURIComponent(capability)}`;
+  private async discoverAgent(summary: string): Promise<{ agentDid: string; serviceEndpoint: string }> {
+    const url = `${this.registryUrl}/agents?summary=${encodeURIComponent(summary)}`;
     const response = await fetch(url);
 
     if (!response.ok) {
       throw new Error(`Registry lookup failed (${response.status})`);
     }
 
-    const { agents } = await response.json() as { agents: any[] };
+    const { agents } = await response.json() as { agents: Array<{ agentDid: string; serviceEndpoint: string }> };
 
     if (!agents || agents.length === 0) {
-      throw new Error(`No agents found with capability: ${capability}`);
+      throw new Error(`No agents found matching summary: ${summary}`);
     }
 
-    const agent = agents[0];
-    return { agentDid: agent.agentDid, serviceEndpoint: agent.serviceEndpoint };
+    return agents[0];
   }
 
-  private async delegateTask(serviceEndpoint: string, task: string, agentDid: string): Promise<any> {
-    const response = await fetch(`${serviceEndpoint}/tasks/execute`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ task, requestedBy: this.orchestratorDid }),
-    });
+  private async delegateTask(
+    serviceEndpoint: string,
+    task: string,
+    agentDid: string,
+    callingConvention: string
+  ): Promise<TaskResult> {
+    if (callingConvention === 'http') {
+      const response = await fetch(`${serviceEndpoint}/tasks/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task, requestedBy: this.orchestratorDid }),
+      });
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Task delegation to ${agentDid} failed (${response.status}): ${text}`);
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Task delegation to ${agentDid} failed (${response.status}): ${text}`);
+      }
+
+      return (await response.json() as { result: TaskResult }).result;
     }
 
-    return (await response.json() as { result: any }).result;
+    if (callingConvention === 'openai-chat' || callingConvention === 'local-chat') {
+      logger.info(`Orchestrator: executing task inline for ${agentDid} using ${callingConvention}`);
+      return await executeTask(task);
+    }
+
+    throw new Error(`Unsupported callingConvention for ${agentDid}: ${callingConvention}`);
   }
 }
 

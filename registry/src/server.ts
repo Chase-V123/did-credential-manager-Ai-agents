@@ -44,7 +44,7 @@ async function startServer() {
           did: 'GET /did',
           health: 'GET /health',
           register: 'POST /agents/register',
-          list: 'GET /agents?capability=<cap>',
+          list: 'GET /agents?summary=<text>',
         },
       });
     });

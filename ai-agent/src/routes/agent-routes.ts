@@ -25,7 +25,7 @@ export function createAgentRoutes(agent: AIAgent): Router {
    * GET /capabilities
    */
   router.get('/capabilities', (_req: Request, res: Response) => {
-    res.json({ capabilities: agent.getCapabilities() });
+    res.json(agent.getProfile());
   });
 
   /**
@@ -36,7 +36,7 @@ export function createAgentRoutes(agent: AIAgent): Router {
       status: 'healthy',
       service: 'ai-agent',
       did: agent.getDid(),
-      capabilities: agent.getCapabilities(),
+      ...agent.getProfile(),
       timestamp: new Date().toISOString(),
     });
   });

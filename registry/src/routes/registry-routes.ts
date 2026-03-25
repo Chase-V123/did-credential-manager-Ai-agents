@@ -1,7 +1,7 @@
 /**
  * Registry Routes
  *
- * HTTP endpoints for agent registration and capability discovery.
+ * HTTP endpoints for agent registration and agent discovery.
  *
  * @module routes/registry-routes
  */
@@ -76,19 +76,24 @@ export function createRegistryRoutes(agent: RegistryAgent): Router {
    * Register an AI agent and receive an AgentIdentityCredential.
    * Requires a valid VendorCredential — only agents from trusted vendors are accepted.
    *
-   * Body: { agentDid, agentId, capabilities, serviceEndpoint, vendorCredential }
+   * Body: { agentDid, agentId, summary, callingConvention, serviceEndpoint, vendorCredential }
    */
   router.post('/agents/register', async (req: Request, res: Response) => {
     try {
-      const { agentDid, agentId, capabilities, serviceEndpoint, vendorCredential } = req.body;
+      const { agentDid, agentId, summary, callingConvention, serviceEndpoint, vendorCredential } = req.body;
 
-      if (!agentDid || !agentId || !capabilities || !serviceEndpoint) {
-        res.status(400).json({ error: 'agentDid, agentId, capabilities, and serviceEndpoint are required' });
+      if (!agentDid || !agentId || !summary || !callingConvention || !serviceEndpoint) {
+        res.status(400).json({ error: 'agentDid, agentId, summary, callingConvention, and serviceEndpoint are required' });
         return;
       }
 
-      if (!Array.isArray(capabilities) || capabilities.length === 0) {
-        res.status(400).json({ error: 'capabilities must be a non-empty array' });
+      if (typeof summary !== 'string' || summary.trim().length === 0) {
+        res.status(400).json({ error: 'summary must be a non-empty string' });
+        return;
+      }
+
+      if (typeof callingConvention !== 'string' || callingConvention.trim().length === 0) {
+        res.status(400).json({ error: 'callingConvention must be a non-empty string' });
         return;
       }
 
@@ -107,7 +112,8 @@ export function createRegistryRoutes(agent: RegistryAgent): Router {
         agentDid,
         agentId,
         vendorDid,
-        capabilities,
+        summary: summary.trim(),
+        callingConvention: callingConvention.trim(),
         serviceEndpoint,
       });
 
@@ -115,7 +121,8 @@ export function createRegistryRoutes(agent: RegistryAgent): Router {
         agentDid,
         agentId,
         vendorDid,
-        capabilities,
+        summary: summary.trim(),
+        callingConvention: callingConvention.trim(),
         serviceEndpoint,
         credential,
       });
@@ -130,16 +137,16 @@ export function createRegistryRoutes(agent: RegistryAgent): Router {
 
   /**
    * GET /agents
-   * List agents, optionally filtered by capability.
+   * List agents, optionally filtered by summary text.
    *
-   * Query: ?capability=summarization
+   * Query: ?summary=summarization
    */
   router.get('/agents', (req: Request, res: Response) => {
     try {
-      const { capability } = req.query;
+      const { summary } = req.query;
 
-      const agents = capability
-        ? agent.getAgentStore().findByCapability(capability as string)
+      const agents = summary
+        ? agent.getAgentStore().findBySummary(summary as string)
         : agent.getAgentStore().getAllAgents();
 
       res.json({ agents });
