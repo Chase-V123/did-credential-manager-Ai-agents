@@ -35,6 +35,7 @@ import { dirname } from 'path';
 interface StoredCredential {
   id: string;
   credential: any;
+  createdAt: string;
 }
 
 class CredentialStore {
@@ -63,13 +64,13 @@ class CredentialStore {
 
   getAll(): StoredCredential[] {
     const rows = this.db.prepare('SELECT * FROM credentials').all() as any[];
-    return rows.map(r => ({ id: r.id, credential: JSON.parse(r.credential) }));
+    return rows.map(r => ({ id: r.id, credential: JSON.parse(r.credential), createdAt: r.createdAt }));
   }
 
   findByType(type: string): StoredCredential[] {
     const rows = this.db.prepare('SELECT * FROM credentials').all() as any[];
     return rows
-      .map(r => ({ id: r.id, credential: JSON.parse(r.credential) }))
+      .map(r => ({ id: r.id, credential: JSON.parse(r.credential), createdAt: r.createdAt }))
       .filter(s => (s.credential.type as string[] || []).includes(type));
   }
 
@@ -112,7 +113,12 @@ export interface AIAgentConfig {
    *  Orchestrators use this to POST /tasks/execute. Defaults to stripping /didcomm. */
   agentBaseUrl?: string;
   agentId: string;
-  capabilities: string[];
+
+  // describes what this agent can do; orchestrator will read this
+  summary: string;
+  // describes how this agent should be called
+  // http, etc
+  callingConvention: string;
   registryUrl: string;
   identityPath: string;
   dbPath?: string;
@@ -167,7 +173,15 @@ export class AIAgent {
 
     // 2. Register with registry if we don't already have an AgentIdentityCredential
     const existing = this.credentialStore.findByType('AgentIdentityCredential');
-    if (existing.length === 0) {
+    const latestCredential = existing
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+      ?.credential?.credentialSubject;
+    const shouldRegister =
+      existing.length === 0 ||
+      !latestCredential?.summary ||
+      !latestCredential?.callingConvention;
+
+    if (shouldRegister) {
       await this.registerWithRegistry();
     } else {
       logger.info('AI Agent: already registered (credential found in store)');
@@ -182,7 +196,7 @@ export class AIAgent {
    * Registry → Vendor → Agent.
    */
   private async registerWithRegistry(): Promise<void> {
-    const { registryUrl, agentId, capabilities, serviceEndpoint, agentBaseUrl } = this.config;
+    const { registryUrl, agentId, summary, callingConvention, serviceEndpoint, agentBaseUrl } = this.config;
     const registrationEndpoint = agentBaseUrl || serviceEndpoint.replace(/\/didcomm$/, '');
 
     // Step 1: register as a vendor — the registry vets and issues a VendorCredential
@@ -209,7 +223,8 @@ export class AIAgent {
       body: JSON.stringify({
         agentDid: this.agentDid,
         agentId,
-        capabilities,
+        summary,
+        callingConvention,
         serviceEndpoint: registrationEndpoint,
         vendorCredential,
       }),
@@ -221,6 +236,7 @@ export class AIAgent {
     }
 
     const { credential: agentCredential } = await agentRes.json() as { credential: any };
+    agentCredential.id = agentCredential.id || `agent-identity-${this.agentDid}`;
     this.credentialStore.store(agentCredential);
     logger.info('AI Agent: received and stored AgentIdentityCredential (vendorDid recorded in credential)');
   }
@@ -231,7 +247,14 @@ export class AIAgent {
   }
 
   getCapabilities(): string[] {
-    return this.config.capabilities;
+    return [this.config.summary];
+  }
+
+  getProfile(): { summary: string; callingConvention: string } {
+    return {
+      summary: this.config.summary,
+      callingConvention: this.config.callingConvention,
+    };
   }
 
   getCredentials(): StoredCredential[] {
@@ -268,7 +291,18 @@ export class AIAgent {
       challenge: message.body?.challenge,
     });
 
-    const credentials = this.credentialStore.getAll().map(sc => sc.credential);
+    const latestAgentCredential = this.credentialStore
+      .findByType('AgentIdentityCredential')
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+      ?.credential;
+    const credentials = this.credentialStore
+      .getAll()
+      .filter(sc => !(sc.credential.type as string[] || []).includes('AgentIdentityCredential'))
+      .map(sc => sc.credential);
+
+    if (latestAgentCredential) {
+      credentials.unshift(latestAgentCredential);
+    }
 
     if (credentials.length === 0) {
       logger.warn('AI Agent: no credentials available for presentation');

@@ -22,7 +22,8 @@ const SERVICE_ENDPOINT = process.env.SERVICE_ENDPOINT || `http://localhost:${POR
 const AGENT_BASE_URL = process.env.AGENT_BASE_URL || `http://localhost:${PORT}`;
 const REGISTRY_URL = process.env.REGISTRY_URL || 'http://localhost:5004';
 const AGENT_ID = process.env.AGENT_ID || 'summarization-agent-1';
-const AGENT_CAPABILITIES = (process.env.AGENT_CAPABILITIES || 'summarization').split(',').map(s => s.trim());
+const AGENT_SUMMARY = process.env.AGENT_SUMMARY || 'Summarizes text and answers concise research questions over HTTP.';
+const AGENT_CALLING_CONVENTION = process.env.AGENT_CALLING_CONVENTION || 'http';
 const IDENTITY_PATH = process.env.IDENTITY_PATH || './data/ai-agent-identity.json';
 const DB_PATH = process.env.DB_PATH || './data/ai-agent-credentials.db';
 
@@ -39,7 +40,8 @@ async function startServer() {
       serviceEndpoint: SERVICE_ENDPOINT,
       agentBaseUrl: AGENT_BASE_URL,
       agentId: AGENT_ID,
-      capabilities: AGENT_CAPABILITIES,
+      summary: AGENT_SUMMARY,
+      callingConvention: AGENT_CALLING_CONVENTION,
       registryUrl: REGISTRY_URL,
       identityPath: IDENTITY_PATH,
       dbPath: DB_PATH,
@@ -51,7 +53,7 @@ async function startServer() {
       res.json({
         service: 'DID AI Agent',
         did: agent.getDid(),
-        capabilities: agent.getCapabilities(),
+        ...agent.getProfile(),
         endpoints: {
           did: 'GET /did',
           capabilities: 'GET /capabilities',
@@ -68,9 +70,10 @@ async function startServer() {
     });
 
     const server = app.listen(PORT, () => {
-      logger.info(`✅ AI Agent server running on port ${PORT}`);
+      logger.info(`AI Agent server running on port ${PORT}`);
       logger.info(`   DID: ${agent.getDid()}`);
-      logger.info(`   Capabilities: ${agent.getCapabilities().join(', ')}`);
+      logger.info(`   Summary: ${agent.getProfile().summary}`);
+      logger.info(`   Calling convention: ${agent.getProfile().callingConvention}`);
       logger.info(`   Health: http://localhost:${PORT}/health`);
     });
 

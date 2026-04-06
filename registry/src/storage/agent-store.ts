@@ -22,7 +22,8 @@ export interface RegisteredAgent {
   agentDid: string;
   agentId: string;
   vendorDid: string;
-  capabilities: string[];
+  summary: string;
+  callingConvention: string;
   serviceEndpoint: string;
   credential: any;
   registeredAt: string;
@@ -52,7 +53,8 @@ export class AgentStore {
         agentDid TEXT PRIMARY KEY,
         agentId TEXT NOT NULL,
         vendorDid TEXT NOT NULL,
-        capabilities TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        callingConvention TEXT NOT NULL,
         serviceEndpoint TEXT NOT NULL,
         credential TEXT NOT NULL,
         registeredAt TEXT NOT NULL
@@ -60,6 +62,17 @@ export class AgentStore {
 
       CREATE INDEX IF NOT EXISTS idx_agentId ON agents(agentId);
     `);
+
+    const columns = this.db.prepare("PRAGMA table_info('agents')").all() as Array<{ name: string }>;
+    const columnNames = new Set(columns.map(column => column.name));
+
+    if (!columnNames.has('summary')) {
+      this.db.exec(`ALTER TABLE agents ADD COLUMN summary TEXT NOT NULL DEFAULT ''`);
+    }
+
+    if (!columnNames.has('callingConvention')) {
+      this.db.exec(`ALTER TABLE agents ADD COLUMN callingConvention TEXT NOT NULL DEFAULT 'http'`);
+    }
   }
 
   registerVendor(vendor: Omit<RegisteredVendor, 'registeredAt'>): void {
@@ -88,14 +101,15 @@ export class AgentStore {
 
   registerAgent(agent: Omit<RegisteredAgent, 'registeredAt'>): void {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO agents (agentDid, agentId, vendorDid, capabilities, serviceEndpoint, credential, registeredAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO agents (agentDid, agentId, vendorDid, summary, callingConvention, serviceEndpoint, credential, registeredAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       agent.agentDid,
       agent.agentId,
       agent.vendorDid,
-      JSON.stringify(agent.capabilities),
+      agent.summary,
+      agent.callingConvention,
       agent.serviceEndpoint,
       JSON.stringify(agent.credential),
       new Date().toISOString()
@@ -109,11 +123,11 @@ export class AgentStore {
     return row ? this.rowToAgent(row) : null;
   }
 
-  findByCapability(capability: string): RegisteredAgent[] {
+  findBySummary(summary: string): RegisteredAgent[] {
     const stmt = this.db.prepare(
-      "SELECT * FROM agents WHERE capabilities LIKE ? ORDER BY registeredAt ASC"
+      "SELECT * FROM agents WHERE summary LIKE ? ORDER BY registeredAt ASC"
     );
-    const rows = stmt.all(`%${capability}%`) as any[];
+    const rows = stmt.all(`%${summary}%`) as any[];
     return rows.map(r => this.rowToAgent(r));
   }
 
@@ -128,7 +142,8 @@ export class AgentStore {
       agentDid: row.agentDid,
       agentId: row.agentId,
       vendorDid: row.vendorDid,
-      capabilities: JSON.parse(row.capabilities),
+      summary: row.summary,
+      callingConvention: row.callingConvention,
       serviceEndpoint: row.serviceEndpoint,
       credential: JSON.parse(row.credential),
       registeredAt: row.registeredAt,
