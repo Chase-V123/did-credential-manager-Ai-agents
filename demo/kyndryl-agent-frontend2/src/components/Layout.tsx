@@ -10,14 +10,14 @@ export function Layout() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200">
+      <header className="bg-white/80 backdrop-blur border-b border-gray-200 shadow-sm">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Kyndryl DID Agent Demo</h1>
             <p className="text-sm text-gray-500">Registry + AI Agent Discovery</p>
           </div>
 
-          <nav className="flex gap-2">
+          <nav className="flex gap-2 bg-gray-100 p-1 rounded-xl">
             <NavLink to="/registry" className={navClass}>
               Registry
             </NavLink>
