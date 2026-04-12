@@ -73,6 +73,7 @@
 
 #next-steps {
   display: flex;
+  justify-content: center;
   border-top: 1px solid var(--border);
   text-align: left;
 
@@ -96,15 +97,6 @@
   }
 }
 
-#docs {
-  border-right: 1px solid var(--border);
-
-  @media (max-width: 1024px) {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-}
-
 #next-steps ul {
   list-style: none;
   padding: 0;
@@ -114,6 +106,9 @@
 
   .logo {
     height: 18px;
+  }
+  #next-steps ul {
+    justify-content: center;
   }
 
   a {
@@ -327,6 +322,9 @@
   margin-bottom: 16px;
   background: rgba(255, 255, 255, 0.02);
   transition: transform 0.2s ease, border-color 0.2s ease;
+  
+  max-width: 900px;
+  margin: 16px auto;
 }
 
 .agent-card:hover {
@@ -337,7 +335,7 @@
 /* Header */
 .agent-card-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: flex-start;
   gap: 16px;
 }
@@ -401,12 +399,17 @@
   display: none;
 }
 
-#docs {
+#docs {  
   border-right: none;
   width: 100%;
   max-width: 800px;
   margin: 0 auto;
   padding: 20px;
+  text-align: center;
+}
+
+#docs .buttons {
+  justify-content: center;
 }
 
 

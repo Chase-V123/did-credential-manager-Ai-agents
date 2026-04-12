@@ -30,7 +30,7 @@ function App() {
           <h2>Documentation</h2>
           <p>Select Discovery, Registry, or Settings view</p>
 
-          <ul>
+          <ul className="buttons">
             <li>
               <Link to="/registry">Registry</Link>
             </li>
