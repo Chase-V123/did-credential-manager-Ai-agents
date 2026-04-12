@@ -1,0 +1,8 @@
+version: "2"
+tunnels:
+  ai-agent:
+    addr: 5006
+    proto: http
+  orchestrator:
+    addr: 5005
+    proto: http
