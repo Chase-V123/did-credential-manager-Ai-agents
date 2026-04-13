@@ -18,7 +18,7 @@ function Discovery() {
       setSelectedAgentId('')
 
       // Fetch all agents from NANDA and filter client-side by search term
-      const res = await fetch('https://nest.projectnanda.org/api/agents')
+      const res = await fetch('/api/nanda/agents')
       const data = await res.json()
 
       if (!res.ok) {

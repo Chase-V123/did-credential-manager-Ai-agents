@@ -12,7 +12,7 @@ function Registry() {
         setLoading(true)
         setError('')
 
-        const res = await fetch('https://nest.projectnanda.org/api/agents')
+        const res = await fetch('/api/nanda/agents')
         const data = await res.json()
 
         if (!res.ok) {

@@ -130,7 +130,7 @@ services:
       dockerfile: Dockerfile
     container_name: did-agent-frontend
     ports:
-      - "5173:80"
+      - "5174:80"
     networks:
       - did-network
     restart: unless-stopped
