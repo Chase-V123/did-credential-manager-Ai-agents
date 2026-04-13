@@ -35,7 +35,8 @@ export function createRegistryRoutes(agent: RegistryAgent): Router {
 
   /**
    * POST /vendors/register
-   * Register a trusted vendor and receive a VendorCredential.
+   * Submit a vendor application for admin approval.
+   * No credential is issued until an admin approves.
    *
    * Body: { vendorDid, vendorId }
    */
@@ -48,19 +49,141 @@ export function createRegistryRoutes(agent: RegistryAgent): Router {
         return;
       }
 
-      const credential = await agent.issueVendorCredential({ vendorDid, vendorId });
-      agent.getAgentStore().registerVendor({ vendorDid, vendorId, credential });
+      // Check if already approved
+      if (agent.getAgentStore().isTrustedVendor(vendorDid)) {
+        res.status(200).json({ status: 'already_approved', vendorDid });
+        return;
+      }
 
-      res.json({ credential, registryDid: agent.getDid() });
+      const application = agent.getAgentStore().applyVendor(vendorDid, vendorId);
+      res.status(202).json({ status: application.status, vendorDid, message: 'Vendor application submitted. Awaiting admin approval.' });
     } catch (error: any) {
-      logger.error('Error registering vendor:', error);
+      logger.error('Error submitting vendor application:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * GET /vendors/applications
+   * List vendor applications, optionally filtered by status.
+   *
+   * Query: ?status=pending
+   */
+  router.get('/vendors/applications', (req: Request, res: Response) => {
+    try {
+      const { status } = req.query;
+      const applications = agent.getAgentStore().getAllApplications(status as string | undefined);
+      res.json({ applications });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * GET /vendors/status/:vendorDid
+   * Check a vendor's application status. If approved, includes the credential.
+   * This is polled by AI agents waiting for their vendor to be approved.
+   */
+  router.get('/vendors/status/:vendorDid', (req: Request, res: Response) => {
+    try {
+      const { vendorDid } = req.params;
+      const application = agent.getAgentStore().getVendorApplication(vendorDid);
+
+      if (!application) {
+        res.status(404).json({ status: 'not_found' });
+        return;
+      }
+
+      if (application.status === 'approved') {
+        // Retrieve the credential from the vendors table
+        const vendors = agent.getAgentStore().getAllVendors();
+        const vendor = vendors.find(v => v.vendorDid === vendorDid);
+        res.json({ status: 'approved', credential: vendor?.credential || null });
+      } else {
+        res.json({ status: application.status });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * POST /vendors/approve
+   * Admin approves a pending vendor application. Issues VendorCredential.
+   *
+   * Body: { vendorDid }
+   */
+  router.post('/vendors/approve', async (req: Request, res: Response) => {
+    try {
+      const { vendorDid } = req.body;
+
+      if (!vendorDid) {
+        res.status(400).json({ error: 'vendorDid is required' });
+        return;
+      }
+
+      const application = agent.getAgentStore().getVendorApplication(vendorDid);
+      if (!application) {
+        res.status(404).json({ error: 'No vendor application found for this DID' });
+        return;
+      }
+
+      if (application.status === 'approved') {
+        res.status(200).json({ status: 'already_approved' });
+        return;
+      }
+
+      if (application.status === 'rejected') {
+        res.status(400).json({ error: 'This vendor application has been rejected' });
+        return;
+      }
+
+      // Issue credential and register as trusted vendor
+      const credential = await agent.issueVendorCredential({ vendorDid, vendorId: application.vendorId });
+      agent.getAgentStore().approveVendor(vendorDid);
+      agent.getAgentStore().registerVendor({ vendorDid, vendorId: application.vendorId, credential });
+
+      logger.info(`Vendor approved and credential issued: ${application.vendorId} (${vendorDid})`);
+      res.json({ status: 'approved', credential, registryDid: agent.getDid() });
+    } catch (error: any) {
+      logger.error('Error approving vendor:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * POST /vendors/reject
+   * Admin rejects a pending vendor application.
+   *
+   * Body: { vendorDid }
+   */
+  router.post('/vendors/reject', async (req: Request, res: Response) => {
+    try {
+      const { vendorDid } = req.body;
+
+      if (!vendorDid) {
+        res.status(400).json({ error: 'vendorDid is required' });
+        return;
+      }
+
+      const application = agent.getAgentStore().getVendorApplication(vendorDid);
+      if (!application) {
+        res.status(404).json({ error: 'No vendor application found for this DID' });
+        return;
+      }
+
+      agent.getAgentStore().rejectVendor(vendorDid);
+      logger.info(`Vendor rejected: ${vendorDid}`);
+      res.json({ status: 'rejected' });
+    } catch (error: any) {
+      logger.error('Error rejecting vendor:', error);
       res.status(500).json({ error: error.message });
     }
   });
 
   /**
    * GET /vendors
-   * List all trusted vendors.
+   * List all trusted (approved) vendors.
    */
   router.get('/vendors', (_req: Request, res: Response) => {
     try {

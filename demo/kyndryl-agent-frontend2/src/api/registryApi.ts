@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { config } from '../config';
-import type { RegisteredAgent, RegisteredVendor } from '../types';
+import type { RegisteredAgent, RegisteredVendor, VendorApplication } from '../types';
 
 const api = axios.create({
   baseURL: config.registryUrl,
@@ -28,6 +28,28 @@ export const registryApi = {
       params: summary ? { summary } : {},
     });
     return res.data.agents || [];
+  },
+
+  async getVendorApplications(status?: string): Promise<VendorApplication[]> {
+    const res = await api.get('/vendors/applications', {
+      params: status ? { status } : {},
+    });
+    return res.data.applications || [];
+  },
+
+  async applyVendor(vendorDid: string, vendorId: string): Promise<{ status: string }> {
+    const res = await api.post('/vendors/register', { vendorDid, vendorId });
+    return res.data;
+  },
+
+  async approveVendor(vendorDid: string): Promise<{ status: string; credential?: any }> {
+    const res = await api.post('/vendors/approve', { vendorDid });
+    return res.data;
+  },
+
+  async rejectVendor(vendorDid: string): Promise<{ status: string }> {
+    const res = await api.post('/vendors/reject', { vendorDid });
+    return res.data;
   },
 };
 

@@ -1,8 +1,8 @@
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
 import ATMImg from './assets/A&M Galv Logo.jpg'
 import Registry from './views/Registry'
 import Discovery from './views/Discovery'
+import Settings from './views/Settings'
+import Vendors from './views/Vendors'
 import './App.css'
 import { Routes, Route, Link } from 'react-router-dom'
 
@@ -32,6 +32,9 @@ function App() {
 
           <ul className="buttons">
             <li>
+              <Link to="/vendors">Vendors</Link>
+            </li>
+            <li>
               <Link to="/registry">Registry</Link>
             </li>
             <li>
@@ -45,9 +48,10 @@ function App() {
           <div className="page-view">
             <Routes>
               <Route path="/" element={<div>Home Page</div>} />
+              <Route path="/vendors" element={<Vendors />} />
               <Route path="/registry" element={<Registry />} />
               <Route path="/discovery" element={<Discovery />} />
-              <Route path="/settings" element={<div>Settings Page</div>} />
+              <Route path="/settings" element={<Settings />} />
             </Routes>
           </div>
         </div>

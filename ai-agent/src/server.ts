@@ -24,6 +24,7 @@ const REGISTRY_URL = process.env.REGISTRY_URL || 'http://localhost:5004';
 const AGENT_ID = process.env.AGENT_ID || 'summarization-agent-1';
 const AGENT_SUMMARY = process.env.AGENT_SUMMARY || 'Summarizes text and answers concise research questions over HTTP.';
 const AGENT_CALLING_CONVENTION = process.env.AGENT_CALLING_CONVENTION || 'http';
+const VENDOR_DID = process.env.VENDOR_DID || '';
 const IDENTITY_PATH = process.env.IDENTITY_PATH || './data/ai-agent-identity.json';
 const DB_PATH = process.env.DB_PATH || './data/ai-agent-credentials.db';
 
@@ -43,6 +44,7 @@ async function startServer() {
       summary: AGENT_SUMMARY,
       callingConvention: AGENT_CALLING_CONVENTION,
       registryUrl: REGISTRY_URL,
+      vendorDid: VENDOR_DID || undefined,
       identityPath: IDENTITY_PATH,
       dbPath: DB_PATH,
     });

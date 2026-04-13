@@ -464,3 +464,148 @@ select:focus {
   background-color: #2a2a2a;
   color: white;
 }
+
+/* === VENDOR CARD (approved vendors) === */
+
+.vendor-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+  max-width: 900px;
+  margin: 16px auto;
+}
+
+.vendor-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+}
+
+.vendor-card-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.vendor-card-section {
+  margin-bottom: 8px;
+}
+
+.vendor-card-label {
+  color: var(--text-light);
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.vendor-card-value {
+  color: var(--text);
+  font-size: 13px;
+}
+
+/* === VENDOR APPLICATION CARD === */
+
+.vendor-app-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.02);
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.vendor-app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.vendor-app-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.vendor-app-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.vendor-app-detail {
+  font-size: 13px;
+}
+
+.vendor-app-label {
+  color: var(--text-light);
+  margin-bottom: 2px;
+}
+
+.vendor-app-value {
+  color: var(--text);
+}
+
+.vendor-app-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* === STATUS BADGES === */
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-pending {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.status-approved {
+  background: rgba(45, 106, 79, 0.15);
+  color: #52b788;
+  border: 1px solid rgba(45, 106, 79, 0.3);
+}
+
+.status-rejected {
+  background: rgba(155, 34, 38, 0.15);
+  color: #e5383b;
+  border: 1px solid rgba(155, 34, 38, 0.3);
+}
+
+/* === APPROVE / REJECT BUTTONS === */
+
+.approve-button {
+  padding: 6px 16px;
+  border-color: #2d6a4f;
+  color: #52b788;
+}
+
+.approve-button:hover {
+  background: rgba(45, 106, 79, 0.15);
+  border-color: #52b788;
+  color: #52b788;
+}
+
+.reject-button {
+  padding: 6px 16px;
+  border-color: #9b2226;
+  color: #e5383b;
+}
+
+.reject-button:hover {
+  background: rgba(155, 34, 38, 0.15);
+  border-color: #e5383b;
+  color: #e5383b;
+}

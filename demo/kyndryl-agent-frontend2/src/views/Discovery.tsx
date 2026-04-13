@@ -4,7 +4,7 @@ import { AgentCard } from '../components/AgentCard'
 function Discovery() {
   const [task, setTask] = useState('')
   const [agents, setAgents] = useState<any[]>([])
-  const [selectedAgentDid, setSelectedAgentDid] = useState('')
+  const [selectedAgentId, setSelectedAgentId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [hasSearched, setHasSearched] = useState(false)
@@ -15,23 +15,28 @@ function Discovery() {
       setHasSearched(true)
       setError('')
       setAgents([])
-      setSelectedAgentDid('')
+      setSelectedAgentId('')
 
-      const res = await fetch(
-        `http://localhost:5004/agents?summary=${encodeURIComponent(task)}`
-      )
-
+      // Fetch all agents from NANDA and filter client-side by search term
+      const res = await fetch('https://nest.projectnanda.org/api/agents')
       const data = await res.json()
 
       if (!res.ok) {
         throw new Error(data.error || 'Discovery failed')
       }
 
-      const foundAgents = data.agents || []
+      const allAgents = data.agents || []
+      const query = task.toLowerCase()
+      const foundAgents = allAgents.filter((agent: any) =>
+        agent.name?.toLowerCase().includes(query) ||
+        agent.description?.toLowerCase().includes(query) ||
+        agent.specialties?.some((s: string) => s.toLowerCase().includes(query))
+      )
+
       setAgents(foundAgents)
 
       if (foundAgents.length > 0) {
-        setSelectedAgentDid(foundAgents[0].agentDid)
+        setSelectedAgentId(foundAgents[0].id)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
@@ -41,13 +46,13 @@ function Discovery() {
   }
 
   const selectedAgent = agents.find(
-    (agent) => agent.agentDid === selectedAgentDid
+    (agent) => agent.id === selectedAgentId
   )
 
   return (
     <div>
       <h3>Discover Agents</h3>
-      <p>Enter a task or capability phrase to find matching agents.</p>
+      <p>Search NANDA registry for agents by name, description, or specialty.</p>
 
       <div style={{ marginBottom: '12px' }}>
         <label>Task / Capability</label>
@@ -55,7 +60,7 @@ function Discovery() {
         <input
           value={task}
           onChange={(e) => setTask(e.target.value)}
-          placeholder="ex: summarizes"
+          placeholder="e.g. orchestration, summarization, fraud"
           style={{ width: '100%', padding: '8px', marginTop: '4px' }}
         />
       </div>
@@ -66,7 +71,7 @@ function Discovery() {
         disabled={loading}
         style={{ minWidth: '110px' }}
       >
-        {loading ? 'Searching...' : 'Run'}
+        {loading ? 'Searching...' : 'Search'}
       </button>
 
       <div style={{ marginTop: '16px', minHeight: '260px' }}>
@@ -81,13 +86,13 @@ function Discovery() {
             <label>Select Matching Agent</label>
             <br />
             <select
-              value={selectedAgentDid}
-              onChange={(e) => setSelectedAgentDid(e.target.value)}
+              value={selectedAgentId}
+              onChange={(e) => setSelectedAgentId(e.target.value)}
               style={{ width: '100%', padding: '8px', marginTop: '4px' }}
             >
               {agents.map((agent) => (
-                <option key={agent.agentDid} value={agent.agentDid}>
-                  {agent.agentId} — {agent.summary}
+                <option key={agent.id} value={agent.id}>
+                  {agent.name} — {agent.description}
                 </option>
               ))}
             </select>
@@ -105,16 +110,6 @@ function Discovery() {
             <AgentCard agent={selectedAgent} />
           </div>
         )}
-
-        {/* {selectedAgent && (
-          <div style={{ marginTop: '16px' }}>
-            {[...Array(6)].map((_, i) => (
-              <div key={i} style={{ marginBottom: '12px' }}>
-                <AgentCard agent={selectedAgent} />
-              </div>
-            ))}
-          </div>
-        )} */}
       </div>
     </div>
   )

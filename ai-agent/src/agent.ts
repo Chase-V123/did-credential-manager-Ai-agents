@@ -122,6 +122,9 @@ export interface AIAgentConfig {
   registryUrl: string;
   identityPath: string;
   dbPath?: string;
+  /** DID of the vendor organization this agent belongs to.
+   *  The vendor must be approved via the registry admin UI before this agent can register. */
+  vendorDid?: string;
 }
 
 export class AIAgent {
@@ -191,29 +194,59 @@ export class AIAgent {
   }
 
   /**
-   * Register as a trusted vendor with the registry, then register the agent using
-   * the issued VendorCredential. This establishes the two-level trust chain:
-   * Registry → Vendor → Agent.
+   * Wait for the vendor to be approved by polling the registry.
+   * Returns the VendorCredential once approved.
    */
-  private async registerWithRegistry(): Promise<void> {
-    const { registryUrl, agentId, summary, callingConvention, serviceEndpoint, agentBaseUrl } = this.config;
-    const registrationEndpoint = agentBaseUrl || serviceEndpoint.replace(/\/didcomm$/, '');
+  private async waitForVendorApproval(vendorDid: string): Promise<any> {
+    const { registryUrl } = this.config;
+    const pollIntervalMs = 10_000; // 10 seconds
+    const maxAttempts = 180;       // 30 minutes total
 
-    // Step 1: register as a vendor — the registry vets and issues a VendorCredential
-    logger.info(`AI Agent: registering as vendor with registry at ${registryUrl}`);
-    const vendorRes = await fetch(`${registryUrl}/vendors/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ vendorDid: this.agentDid, vendorId: agentId }),
-    });
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const res = await fetch(`${registryUrl}/vendors/status/${encodeURIComponent(vendorDid)}`);
 
-    if (!vendorRes.ok) {
-      const text = await vendorRes.text();
-      throw new Error(`Vendor registration failed (${vendorRes.status}): ${text}`);
+      if (!res.ok) {
+        if (res.status === 404) {
+          logger.warn(`AI Agent: vendor ${vendorDid} not found in registry. Submit a vendor application via the admin UI.`);
+        } else {
+          logger.warn(`AI Agent: failed to check vendor status (${res.status})`);
+        }
+      } else {
+        const data = await res.json() as { status: string; credential?: any };
+
+        if (data.status === 'approved' && data.credential) {
+          logger.info('AI Agent: vendor approved! Received VendorCredential.');
+          return data.credential;
+        }
+
+        if (data.status === 'rejected') {
+          throw new Error(`Vendor ${vendorDid} was rejected by the registry admin.`);
+        }
+      }
+
+      logger.info(`AI Agent: waiting for vendor approval... (attempt ${attempt}/${maxAttempts})`);
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
     }
 
-    const { credential: vendorCredential } = await vendorRes.json() as { credential: any };
-    logger.info('AI Agent: received VendorCredential');
+    throw new Error(`Timed out waiting for vendor ${vendorDid} to be approved.`);
+  }
+
+  /**
+   * Register with the registry using the vendor's credential.
+   * The vendor must be approved via the admin UI before this agent can register.
+   * Trust chain: Registry → Vendor → Agent.
+   */
+  private async registerWithRegistry(): Promise<void> {
+    const { registryUrl, agentId, summary, callingConvention, serviceEndpoint, agentBaseUrl, vendorDid } = this.config;
+    const registrationEndpoint = agentBaseUrl || serviceEndpoint.replace(/\/didcomm$/, '');
+
+    if (!vendorDid) {
+      throw new Error('VENDOR_DID is required. Set the DID of the vendor organization this agent belongs to.');
+    }
+
+    // Step 1: poll for vendor approval and get VendorCredential
+    logger.info(`AI Agent: checking vendor status for ${vendorDid}...`);
+    const vendorCredential = await this.waitForVendorApproval(vendorDid);
 
     // Step 2: register the agent, presenting the VendorCredential as proof of trust
     logger.info(`AI Agent: registering agent with registry`);
@@ -238,7 +271,7 @@ export class AIAgent {
     const { credential: agentCredential } = await agentRes.json() as { credential: any };
     agentCredential.id = agentCredential.id || `agent-identity-${this.agentDid}`;
     this.credentialStore.store(agentCredential);
-    logger.info('AI Agent: received and stored AgentIdentityCredential (vendorDid recorded in credential)');
+    logger.info('AI Agent: received and stored AgentIdentityCredential (vendor-approved trust chain)');
   }
 
   getDid(): string {

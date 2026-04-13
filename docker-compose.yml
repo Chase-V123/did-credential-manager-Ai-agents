@@ -124,6 +124,25 @@ services:
       retries: 3
       start_period: 10s
 
+  agent-frontend:
+    build:
+      context: ./demo/kyndryl-agent-frontend2
+      dockerfile: Dockerfile
+    container_name: did-agent-frontend
+    ports:
+      - "5173:80"
+    networks:
+      - did-network
+    restart: unless-stopped
+    depends_on:
+      - registry
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
   registry:
     build:
       context: .
@@ -191,6 +210,7 @@ services:
       - REGISTRY_URL=http://did-registry:5004
       - AGENT_ID=summarization-agent-1
       - AGENT_CAPABILITIES=summarization
+      - VENDOR_DID=did:peer:kyndryl-demo-vendor
       - IDENTITY_PATH=/data/ai-agent-identity.json
       - DB_PATH=/data/ai-agent-credentials.db
     volumes:
@@ -205,7 +225,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 120s
 
 networks:
   did-network:

@@ -18,6 +18,14 @@ export interface RegisteredVendor {
   registeredAt: string;
 }
 
+export interface VendorApplication {
+  vendorDid: string;
+  vendorId: string;
+  status: 'pending' | 'approved' | 'rejected';
+  appliedAt: string;
+  reviewedAt: string | null;
+}
+
 export interface RegisteredAgent {
   agentDid: string;
   agentId: string;
@@ -61,6 +69,14 @@ export class AgentStore {
       );
 
       CREATE INDEX IF NOT EXISTS idx_agentId ON agents(agentId);
+
+      CREATE TABLE IF NOT EXISTS vendor_applications (
+        vendorDid TEXT PRIMARY KEY,
+        vendorId TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        appliedAt TEXT NOT NULL,
+        reviewedAt TEXT
+      );
     `);
 
     const columns = this.db.prepare("PRAGMA table_info('agents')").all() as Array<{ name: string }>;
@@ -148,6 +164,66 @@ export class AgentStore {
       credential: JSON.parse(row.credential),
       registeredAt: row.registeredAt,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Vendor application methods
+  // ---------------------------------------------------------------------------
+
+  applyVendor(vendorDid: string, vendorId: string): VendorApplication {
+    const existing = this.getVendorApplication(vendorDid);
+    if (existing) return existing;
+
+    const application: VendorApplication = {
+      vendorDid,
+      vendorId,
+      status: 'pending',
+      appliedAt: new Date().toISOString(),
+      reviewedAt: null,
+    };
+
+    const stmt = this.db.prepare(`
+      INSERT INTO vendor_applications (vendorDid, vendorId, status, appliedAt, reviewedAt)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    stmt.run(application.vendorDid, application.vendorId, application.status, application.appliedAt, application.reviewedAt);
+    logger.info(`Vendor application submitted: ${vendorId} (${vendorDid})`);
+    return application;
+  }
+
+  getVendorApplication(vendorDid: string): VendorApplication | null {
+    const row = this.db.prepare('SELECT * FROM vendor_applications WHERE vendorDid = ?').get(vendorDid) as any;
+    return row ? { ...row, reviewedAt: row.reviewedAt || null } : null;
+  }
+
+  getPendingApplications(): VendorApplication[] {
+    const rows = this.db.prepare("SELECT * FROM vendor_applications WHERE status = 'pending' ORDER BY appliedAt DESC").all() as any[];
+    return rows.map(r => ({ ...r, reviewedAt: r.reviewedAt || null }));
+  }
+
+  getAllApplications(status?: string): VendorApplication[] {
+    if (status) {
+      const rows = this.db.prepare('SELECT * FROM vendor_applications WHERE status = ? ORDER BY appliedAt DESC').all(status) as any[];
+      return rows.map(r => ({ ...r, reviewedAt: r.reviewedAt || null }));
+    }
+    const rows = this.db.prepare('SELECT * FROM vendor_applications ORDER BY appliedAt DESC').all() as any[];
+    return rows.map(r => ({ ...r, reviewedAt: r.reviewedAt || null }));
+  }
+
+  approveVendor(vendorDid: string): void {
+    const stmt = this.db.prepare(`
+      UPDATE vendor_applications SET status = 'approved', reviewedAt = ? WHERE vendorDid = ?
+    `);
+    stmt.run(new Date().toISOString(), vendorDid);
+    logger.info(`Vendor approved: ${vendorDid}`);
+  }
+
+  rejectVendor(vendorDid: string): void {
+    const stmt = this.db.prepare(`
+      UPDATE vendor_applications SET status = 'rejected', reviewedAt = ? WHERE vendorDid = ?
+    `);
+    stmt.run(new Date().toISOString(), vendorDid);
+    logger.info(`Vendor rejected: ${vendorDid}`);
   }
 
   close(): void {

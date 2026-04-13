@@ -32,3 +32,11 @@ export interface HealthResponse {
   did: string;
   timestamp: string;
 }
+
+export interface VendorApplication {
+  vendorDid: string;
+  vendorId: string;
+  status: 'pending' | 'approved' | 'rejected';
+  appliedAt: string;
+  reviewedAt: string | null;
+}
