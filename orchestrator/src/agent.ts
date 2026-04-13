@@ -24,6 +24,10 @@ import { executeTask, TaskResult } from './executor/task-executor.js';
 export interface OrchestrateResult {
   verified: boolean;
   agentDid: string;
+  vendorDid: string;
+  challenge: string;
+  credentialSubject: any;
+  orchestratorDid: string;
   result: TaskResult;
 }
 
@@ -240,6 +244,10 @@ export class OrchestratorAgent {
       pending.resolve({
         verified: true,
         agentDid: pending.agentDid,
+        vendorDid: vendorDid!,
+        challenge: pending.challengeValue,
+        credentialSubject: verificationResult.claims,
+        orchestratorDid: this.orchestratorDid!,
         result: taskResult,
       });
     } catch (error) {

@@ -3,6 +3,7 @@ import Registry from './views/Registry'
 import Discovery from './views/Discovery'
 import Settings from './views/Settings'
 import Vendors from './views/Vendors'
+import Orchestrate from './views/Orchestrate'
 import './App.css'
 import { Routes, Route, Link } from 'react-router-dom'
 
@@ -41,6 +42,9 @@ function App() {
               <Link to="/discovery">Discovery</Link>
             </li>
             <li>
+              <Link to="/orchestrate">Orchestrate</Link>
+            </li>
+            <li>
               <Link to="/settings">Settings</Link>
             </li>
           </ul>
@@ -51,6 +55,7 @@ function App() {
               <Route path="/vendors" element={<Vendors />} />
               <Route path="/registry" element={<Registry />} />
               <Route path="/discovery" element={<Discovery />} />
+              <Route path="/orchestrate" element={<Orchestrate />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </div>
